@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ניתוח תמונה עם Rekognition</title>
+  <style>
+    :root {
+      --primary-dark: #0a1929;
+      --primary-blue: #0b3d91;
+      --secondary-blue: #1e88e5;
+      --neon-blue: #00c3ff;
+      --neon-pink: #ff00c8;
+      --text-light: #e0f7fa;
+      --card-bg: rgba(13, 27, 42, 0.7);
+      --border-radius: 8px;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body { 
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-blue) 100%);
+      color: var(--text-light);
+      min-height: 100vh;
+      padding: 2rem;
+      direction: rtl;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+      background-color: rgba(10, 25, 41, 0.5);
+      backdrop-filter: blur(10px);
+      border-radius: var(--border-radius);
+      box-shadow: 0 8px 32px rgba(0, 195, 255, 0.1);
+      border: 1px solid rgba(0, 195, 255, 0.2);
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      color: var(--text-light);
+      text-shadow: 0 0 10px var(--neon-blue), 0 0 20px rgba(0, 195, 255, 0.5);
+      letter-spacing: 1px;
+    }
+    
+    h2 {
+      font-size: 1.8rem;
+      margin: 2rem 0 1rem;
+      color: var(--neon-blue);
+      border-bottom: 2px solid var(--neon-blue);
+      padding-bottom: 0.5rem;
+      text-shadow: 0 0 5px rgba(0, 195, 255, 0.5);
+    }
+    
+    .upload-section {
+      background-color: var(--card-bg);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(0, 195, 255, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 195, 255, 0.1);
+    }
+    
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    label {
+      font-weight: 500;
+      color: var(--neon-blue);
+    }
+    
+    input[type="text"] {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 2px solid var(--secondary-blue);
+      border-radius: var(--border-radius);
+      padding: 0.8rem 1rem;
+      color: var(--text-light);
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      outline: none;
+    }
+    
+    input[type="text"]:focus {
+      border-color: var(--neon-blue);
+      box-shadow: 0 0 8px var(--neon-blue);
+    }
+    
+    input[type="file"] {
+      background-color: rgba(255, 255, 255, 0.05);
+      border: 2px dashed var(--secondary-blue);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      width: 100%;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    input[type="file"]:hover {
+      border-color: var(--neon-blue);
+      box-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
+    }
+    
+    button {
+      background: linear-gradient(90deg, var(--secondary-blue), var(--neon-blue));
+      color: white;
+      border: none;
+      border-radius: var(--border-radius);
+      padding: 0.8rem 1.5rem;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 0.5rem;
+      text-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 4px 15px rgba(0, 195, 255, 0.3);
+    }
+    
+    button:hover {
+      background: linear-gradient(90deg, var(--neon-blue), var(--secondary-blue));
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 195, 255, 0.4);
+    }
+    
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    
+    .result-box {
+      background-color: var(--card-bg);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      border: 1px solid rgba(0, 195, 255, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 195, 255, 0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .result-box:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0, 195, 255, 0.2);
+    }
+    
+    .result-box h3 {
+      color: var(--neon-blue);
+      margin-bottom: 1rem;
+      border-bottom: 1px solid rgba(0, 195, 255, 0.3);
+      padding-bottom: 0.5rem;
+    }
+    
+    ul {
+      list-style-type: none;
+    }
+    
+    li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    li:last-child {
+      border-bottom: none;
+    }
+    
+    .label-name {
+      font-weight: bold;
+      color: var(--text-light);
+    }
+    
+    .confidence {
+      color: var(--neon-pink);
+      font-weight: 500;
+    }
+    
+    .error {
+      border-color: var(--neon-pink);
+      background-color: rgba(255, 0, 200, 0.1);
+    }
+    
+    @keyframes glow {
+      0% { box-shadow: 0 0 5px var(--neon-blue); }
+      50% { box-shadow: 0 0 20px var(--neon-blue), 0 0 30px var(--neon-blue); }
+      100% { box-shadow: 0 0 5px var(--neon-blue); }
+    }
+    
+    .loading {
+      animation: glow 1.5s infinite;
+    }
+    
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      
+      .container {
+        padding: 1.5rem;
+      }
+      
+      #results {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>זיהוי אובייקטים בתמונה עם Rekognition</h1>
+
+    <div class="upload-section">
+      <h1>הכנס מזהה לקוח ובחר תמונות</h1>
+      <form id="uploadForm">
+        <div class="form-group">
+          <label for="clientId">מזהה לקוח:</label>
+          <input type="text" id="clientId" required>
+        </div>
+        <h2>העלאת תמונות לניתוח</h2>
+        <div class="form-group">
+          <label for="imageFiles">בחר תמונות:</label>
+          <input type="file" id="imageFiles" accept="image/*" multiple required>
+        </div>
+        <button type="submit">העלה ונתח</button>
+      </form>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script src="app.js"></script>
+  <div class="container" align="center">All rights reserved 2025, Uri Berman AWS Course</div>
+</body>
+</html>
