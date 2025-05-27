@@ -65,8 +65,12 @@ cd image-analysis-project/terraform
 ### cd to the terraform folder where main.tf resides then do:
 ```bash
 terraform init
+terraform plan 
+### if you're satisfied with the plan, continue with creation 
 terraform apply
 ```
+### To delete all env use: terraform destory  
+
 
 3. **Update Frontend with API URL**:
 ### In linux\macos do chmod +x update_api_url.sh

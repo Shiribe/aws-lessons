@@ -4,143 +4,19 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+
+
 provider "aws" {
   region = var.aws_region
 }
 
+# S3 bucket for image storage and frontend hosting
 resource "aws_s3_bucket" "photos" {
-  bucket = "s3-clientphotos"
-}
-
-resource "aws_dynamodb_table" "client_table" {
-  name           = "client"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "ClientId"
-
-  attribute {
-    name = "ClientId"
-    type = "S"
+  bucket         = "s3-clientphotos-01"
+  force_destroy  = true  # ensures objects are deleted during destroy
+  tags = {
+    Name = "Client Photos"
   }
-}
-
-resource "aws_iam_role" "lambda_role" {
-  name = "lambda_rekognition_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Action = "sts:AssumeRole",
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      },
-      Effect = "Allow"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "lambda_policy" {
-  name = "lambda_rekognition_policy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Action = [
-          "s3:*",
-          "dynamodb:PutItem",
-          "rekognition:DetectLabels",
-          "logs:*"
-        ],
-        Effect   = "Allow",
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_file = "${path.module}/../lambda/lambda_function.py"
-  output_path = "${path.module}/lambda_function.zip"
-}
-
-# Add CloudWatch Log Group for Lambda function
-resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/aws/lambda/analyzeImage"  # Hardcode the name instead of referencing the function
-  retention_in_days = 14
-  
-  # Ignore errors if the log group already exists
-  lifecycle {
-    ignore_changes = [tags]
-    prevent_destroy = false
-  }
-}
-
-resource "aws_lambda_function" "analyze_image" {
-  function_name = "analyzeImage"
-  role          = aws_iam_role.lambda_role.arn
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.9"
-  filename      = data.archive_file.lambda_zip.output_path
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  timeout       = 20
-
-  environment {
-    variables = {
-      S3_BUCKET = aws_s3_bucket.photos.bucket
-      DDB_TABLE = aws_dynamodb_table.client_table.name
-      LOG_LEVEL = "INFO"
-    }
-  }
-  
-  # Keep the depends_on for the IAM policy but remove the log group
-  depends_on = [
-    aws_iam_role_policy.lambda_policy
-  ]
-}
-
-resource "aws_apigatewayv2_api" "api" {
-  name          = "image-analysis-api"
-  protocol_type = "HTTP"
-
-  cors_configuration {
-    allow_origins = ["*"]
-    allow_methods = ["POST", "OPTIONS"]
-    allow_headers = ["*"]
-    max_age       = 86400
-  }
-}
-
-resource "aws_apigatewayv2_integration" "lambda_integration" {
-  api_id             = aws_apigatewayv2_api.api.id
-  integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.analyze_image.invoke_arn
-  integration_method = "POST"
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "upload_route" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "POST /analyze"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
-}
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.api.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-resource "aws_lambda_permission" "allow_api" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.analyze_image.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
-}
-
-output "api_url" {
-  value = aws_apigatewayv2_api.api.api_endpoint
 }
 
 resource "aws_s3_bucket_website_configuration" "static_site" {
@@ -149,7 +25,7 @@ resource "aws_s3_bucket_website_configuration" "static_site" {
   index_document {
     suffix = "index.html"
   }
-}
+} 
 
 resource "aws_s3_bucket_public_access_block" "no_block" {
   bucket = aws_s3_bucket.photos.id
@@ -187,19 +63,154 @@ resource "aws_s3_object" "frontend_files" {
   source = "${path.module}/../frontend/${each.value}"
   etag   = filemd5("${path.module}/../frontend/${each.value}")
 
-  # Set content type based on file extension
   content_type = lookup(
     {
       ".html" = "text/html",
       ".js"   = "application/javascript",
       ".css"  = "text/css",
       ".ico"  = "image/x-icon"
-      # Add more content types as needed
     },
     regex("\\.[^.]+$", each.value),
-    "application/octet-stream" # Default content type
+    "application/octet-stream"
   )
 }
+
+# DynamoDB table to store client metadata
+resource "aws_dynamodb_table" "client_table" {
+  name         = "client"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "ClientId"
+
+  attribute {
+    name = "ClientId"
+    type = "S"
+  }
+}
+
+# IAM role for Lambda with basic permissions and Rekognition access
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda_rekognition_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      },
+      Effect = "Allow"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "lambda_rekognition_policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "s3:*",
+          "dynamodb:PutItem",
+          "rekognition:DetectLabels",
+          "logs:*"
+        ],
+        Effect   = "Allow",
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Archive and package the Lambda function from source
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../lambda/lambda_function.py"
+  output_path = "${path.module}/lambda_function.zip"
+}
+
+# Optional: create CloudWatch Log Group manually
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  name              = "/aws/lambda/analyzeImage"
+  retention_in_days = 14
+
+  lifecycle {
+    ignore_changes    = [tags]
+    prevent_destroy   = false
+  }
+}
+
+# Lambda function for image analysis using Rekognition
+resource "aws_lambda_function" "analyze_image" {
+  function_name = "analyzeImage"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+  filename      = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  timeout       = 20
+
+  environment {
+    variables = {
+      S3_BUCKET = aws_s3_bucket.photos.bucket
+      DDB_TABLE = aws_dynamodb_table.client_table.name
+      LOG_LEVEL = "INFO"
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.lambda_policy
+  ]
+}
+
+# API Gateway v2 for HTTP integration with Lambda
+resource "aws_apigatewayv2_api" "api" {
+  name          = "image-analysis-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["POST", "OPTIONS"]
+    allow_headers = ["*"]
+    max_age       = 86400
+  }
+}
+
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id                 = aws_apigatewayv2_api.api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.analyze_image.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "upload_route" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /analyze"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.api.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+resource "aws_lambda_permission" "allow_api" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.analyze_image.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
+}
+
+# Outputs for convenience
+output "api_url" {
+  value = aws_apigatewayv2_api.api.api_endpoint
+}
+
 
 output "frontend_url" {
   value = "http://${aws_s3_bucket.photos.bucket}.s3-website-${var.aws_region}.amazonaws.com"
