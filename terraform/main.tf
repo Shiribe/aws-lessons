@@ -12,7 +12,7 @@ provider "aws" {
 
 # S3 bucket for image storage and frontend hosting
 resource "aws_s3_bucket" "photos" {
-  bucket         = "s3-clientphotos-01"
+  bucket         = "s3-clientphotos-shiri"
   force_destroy  = true  # ensures objects are deleted during destroy
   tags = {
     Name = "Client Photos"

@@ -1,5 +1,5 @@
 let clientId = null;
-const API_URL = "REPLACE_WITH_API_URL/analyze";
+const API_URL = "https://mbo0gprxpg.execute-api.us-east-1.amazonaws.com/analyze";
 // Add event listener to the uploadForm
 
 // Remove the clientForm event listener since that form no longer exists
